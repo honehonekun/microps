@@ -19,7 +19,6 @@ struct net_protocol {
  */
 
 static struct net_device *devices;
-static struct net_protocol *protocols;
 
 struct net_device * net_device_alloc(void) //メモリ割り当て
 {
