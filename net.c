@@ -7,22 +7,11 @@
 #include "util.h"
 #include "net.h"
 
-struct net_protocol {
-    struct net_protocol *next;
-    uint16_t type;
-    net_protocol_handler_t handler;
-};
-
 /*
  * NOTE: if you want to add/delete the entries after net_run(),
  *       you need to protect these lists with a lock.
  */
-<<<<<<< HEAD
 static struct net_device *devices; //最初はnull 共有リスト
-=======
-static struct net_device *devices;
-static struct net_protocol *protocols;
->>>>>>> 1d0dbbd (Skeleton of step3)
 
 struct net_device * net_device_alloc(void) //メモリ割り当て
 {
@@ -115,14 +104,6 @@ int net_device_output(struct net_device *dev, uint16_t type, const uint8_t *data
     }
 
     return 0;
-}
-
-/*
- * NOTE: must not be call after net_run()
- */
-int
-net_protocol_register(uint16_t type, net_protocol_handler_t handler)
-{
 }
 
 int
