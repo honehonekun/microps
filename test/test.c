@@ -11,7 +11,7 @@
 
 static volatile sig_atomic_t terminate;
 
-struct net_device * dummy_init(void){
+struct net_device * dummy_init(void){ //ダミーデバイス
     struct net_device *dev;
 
     dev = net_device_alloc();
