@@ -20,11 +20,11 @@ on_signal(int signum)
     terminate = 1;
 }
 
-static struct net_device *dev;
 
 static int setup(void)
 {
     struct sigaction sa = {0};
+    struct net_device *dev;
     struct ip_iface *iface;
 
     sa.sa_handler = on_signal;
@@ -77,11 +77,17 @@ cleanup(void)
 static int
 app_main(void)
 {
+    ip_addr_t src,dst;
+    size_t offset= IP_HDR_SIZE_MIN;
+    ip_addr_pton(LOOPBACK_IP_ADDR,&src);
+    dst =src;
+
+
     debugf("press Ctrl+C to terminate");
     while (!terminate)
     {
-        if(net_device_output(dev,NET_PROTOCOL_TYPE_IP,test_data,sizeof(test_data),NULL)== -1){
-            errorf("net_device_output() failure");
+        if(ip_output(1,test_data+offset,sizeof(test_data)- offset,src,dst) == -1){
+            errorf("ip_output() failure");
             break;
         }
         sleep(1);
