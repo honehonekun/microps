@@ -72,4 +72,57 @@ static struct net_device_ops ether_tap_ops = {
 struct net_device *
 ether_tap_init(const char *name, const char *addr)
 {
+    struct net_device *dev;
+    struct ether_tap *tap;
+
+    infof("name=%s,addr=%s",name,addr ? addr:"(none)");
+    dev=net_device_alloc();
+    if(!dev){
+        errorf("net_device_alloc() failure");
+        return NULL;
+    }
+
+    dev->type = NET_DEVICE_TYPE_ETHERNET;
+    dev->mtu = ETHER_PAYLOAD_SIZE_MAX;
+    dev->flags = (NET_DEVICE_FLAG_BROADCAST | NET_DEVICE_FLAG_NEED_ARP);
+    dev->hlen =ETHER_HDR_SIZE;
+    dev->alen =ETHER_ADDR_LEN;
+    memcpy(dev->broadcast,ETHER_ADDR_BROADCAST,ETHER_ADDR_LEN);
+    if(addr){
+        if(ether_addr_pton(addr,dev->addr) == -1){
+            errorf("invalid address, addr=%s",addr);
+            return NULL;
+        }
+    }
+    dev->ops = &ether_tap_ops;
+    tap = memory_alloc(sizeof(*tap));
+    if(!tap){
+        errorf("memory_alloc() failure");
+        return NULL;
+    }
+    strncpy(tap->name,name,sizeof(tap->name) -1);
+    tap->fd=-1;
+    tap->irq = ETHER_TAP_IRQ;
+    dev->priv = tap;
+    if(net_device_register(dev) == -1){
+        errorf("net_device_register() failure");
+        memory_free(tap);
+        return NULL;
+    }
+    if(intr_register(tap->irq,ether_tap_isr,INTR_IRQ_SHARED,dev) == -1){
+        errorf("intr_rigister() failure");
+        return NULL;
+    }
+    infof("success,dev=%s,irq=%d",dev->name,tap->irq);
+    return dev;
+
+
+
+
+
+
+
+
+
+
 }
