@@ -124,16 +124,50 @@ icmp_input(const struct ip_hdr *iphdr, const uint8_t *data, size_t len, struct i
            ip_addr_ntop(iphdr->dst, addr2, sizeof(addr2)), len);
 
     icmp_print(data,len);
+
+
+    hdr =(struct icmp_hdr* )data;
+    
+    switch(hdr->icmp_type){
+        case ICMP_TYPE_ECHO:
+            icmp_output(ICMP_TYPE_ECHO_REPLY,hdr->icmp_code,hdr->dep,(uint8_t *)(hdr+1),len-sizeof(*hdr),iface->unicast,iphdr->src);
+            break;
+        default:
+            break;
+    }
 }
 
 int
 icmp_output(uint8_t type, uint8_t code, uint32_t val, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst)
 {
-}
+    uint8_t buf[ICMP_BUFSIZ];
+    struct icmp_hdr *hdr;
+    size_t msg_len;
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[IP_ADDR_STR_LEN];
 
-int
-icmp_output(uint8_t type, uint8_t code, uint32_t val, const uint8_t *data, size_t len, ip_addr_t src, ip_addr_t dst)
-{
+    if(sizeof(buf)<sizeof(*hdr) + len){
+        errorf("too large");
+        return -1;
+    }
+
+    hdr = (struct icmp_hdr *)buf;
+    hdr->icmp_type = type;
+    hdr->icmp_code =code;
+    hdr->icmp_sum =0;
+    hdr ->dep = val;
+
+    memcpy(hdr+1,data,len);
+    msg_len = sizeof(*hdr) +len;
+    hdr->icmp_sum =cksum16((uint16_t *)hdr,msg_len,0);
+    debugf("%s => %s,len=%zu",
+        ip_addr_ntop(src,addr1,sizeof(addr1)),
+        ip_addr_ntop(dst,addr2,sizeof(addr2)),
+        msg_len
+    );
+
+    icmp_print(buf,msg_len);
+    return ip_output(IP_PROTOCOL_ICMP,buf,msg_len,src,dst);
 }
 
 int

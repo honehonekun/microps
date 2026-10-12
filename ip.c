@@ -10,6 +10,7 @@
 #include "util.h"
 #include "net.h"
 #include "ip.h"
+#include "icmp.h"
 
 #define IP_HDR_FLAG_MF 0x2000 /* more flagments flag */
 #define IP_HDR_FLAG_DF 0x4000 /* don't flagment flag */
@@ -260,6 +261,11 @@ ip_input(const uint8_t *data, size_t len, struct net_device *dev)
             return;
         }
     }
+    //ここまでくる時点で未登録のプロトコル
+    if(hlen +8 <= total){
+        icmp_output(ICMP_TYPE_DEST_UNREACH,ICMP_CODE_PROTO_UNREACH,0,data,hlen+8,iface->unicast,hdr->src);
+    }
+    
 }
 
 static int
