@@ -90,7 +90,7 @@ net_device_close(struct net_device *dev) //デバイスにクローズフラグ�
 
 int net_device_output(struct net_device *dev, uint16_t type, const uint8_t *data, size_t len, const void *dst)
 {
-    //送信処理（今はダンプだけ）
+    //送信処理
     debugf("dev=%s,type=0x%04x,len=%zu",dev->name,type,len);
     debugdump(data,len); //コンパイル時に宣言したら表示される
     if(!NET_DEVICE_IS_UP(dev)){
