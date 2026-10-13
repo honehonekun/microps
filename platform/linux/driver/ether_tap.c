@@ -131,7 +131,7 @@ ether_tap_output(struct net_device *dev, uint16_t type, const uint8_t *buf, size
         pad = ETHER_PAYLOAD_SIZE_MIN -len;
     }
     flen = sizeof(*hdr)+len+pad;
-    debugf("dev=%s, type =0x%04f,len=%zu",dev->name,type,flen);
+    debugf("dev=%s, type =0x%04x,len=%zu",dev->name,type,flen);
     ether_print(frame,flen);
     if(write(PRIV(dev)->fd,frame,flen)== -1){
         errorf("write: %s",strerror(errno));
