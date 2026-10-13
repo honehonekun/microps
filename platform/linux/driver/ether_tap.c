@@ -36,11 +36,77 @@ struct ether_tap {
 static int
 ether_tap_set_default_addr(struct net_device *dev)
 {
+    int soc;
+    struct ifreq ifr = {};
+
+    soc = socket(AF_INET,SOCK_DGRAM,0);
+    if(soc == -1){
+        errorf("socket:%s ,dev=%s",strerror(errno),dev->name);
+        return -1;
+    }
+    strncpy(ifr.ifr_name,PRIV(dev)->name,sizeof(ifr.ifr_name) -1);
+    if(ioctl(soc,SIOCGIFHWADDR,&ifr) == -1){ //Get Interface Hardware Address
+        errorf("ioctl(SIOCGIFHWADDR):%s, dev=%s",strerror(errno),dev->name);
+        close(soc);
+        return -1;
+    }
+    memcpy(dev->addr,ifr.ifr_hwaddr.sa_data,ETHER_ADDR_LEN);
+    close(soc);
+    return 0;
+
+
+
 }
 
 static int
 ether_tap_open(struct net_device *dev)
 {
+    struct ether_tap *tap;
+    struct ifreq ifr ={0};
+    int val;
+    char addr[ETHER_ADDR_STR_LEN];
+
+    tap = PRIV(dev);
+    tap->fd = open(CLONE_DEVICE,O_RDWR);
+    if(tap->fd == -1){
+        errorf("open:%s ,dev=%s",strerror(errno),dev->name);
+        return -1;
+    }
+    strncpy(ifr.ifr_name,tap->name,sizeof(ifr.ifr_name)-1);
+    ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
+    if (ioctl(tap->fd,TUNSETIFF,&ifr) == -1){
+        errorf("ioctl(TUNSETIFF):%s,dev=%s",strerror(errno),dev->name);
+        close(tap->fd);
+        return -1;
+    }
+    if(fcntl(tap->fd,F_SETOWN,getpid()) == -1){ //自プロセスにシグナルを送る
+        errorf("fcntl(F_SETOWN):%s,dev=%s",strerror(errno),dev->name);
+        close(tap->fd);
+        return -1;
+    }
+    val =fcntl(tap->fd,F_GETFL,0);
+    if(val == -1){
+        errorf("fcntl(F_GETFL):%s,dev=%s",strerror(errno),dev->name);
+        close(tap->fd);
+        return -1;
+    }
+    if(fcntl(tap->fd,F_SETFL,val | O_ASYNC | O_NONBLOCK) == -1){
+        errorf("fcntl(F_SETFL): %s,dev=%s",strerror(errno),dev->name);
+        close(tap->fd);
+        return -1;
+    }
+    if(memcmp(dev->addr,ETHER_ADDR_ANY,ETHER_ADDR_LEN) ==0){
+        if(ether_tap_set_default_addr(dev) == -1){
+            errorf("ether_tap_addr() failure,dev=%s",dev->name);
+            close(tap->fd);
+            return -1;
+        }
+    }
+    infof("dev=%s, addr=%s",dev->name,ether_addr_ntop(dev->addr,addr,sizeof(addr)));
+    return 0;
+
+
+
 }
 
 static int
@@ -51,6 +117,29 @@ ether_tap_close(struct net_device *dev)
 int
 ether_tap_output(struct net_device *dev, uint16_t type, const uint8_t *buf, size_t len, const void *dst)
 {
+    uint8_t frame[ETHER_FRAME_SIZE_MAX] ={};
+    struct ether_hdr *hdr;
+    size_t flen,pad =0;
+
+
+    hdr = (struct ether_hdr *)frame;
+    memcpy(hdr->dst,dst,ETHER_ADDR_LEN);
+    memcpy(hdr->src,dev->addr,ETHER_ADDR_LEN);
+    hdr->type= hton16(type);
+    memcpy(hdr+1,buf,len);
+    if(len<ETHER_PAYLOAD_SIZE_MIN){
+        pad = ETHER_PAYLOAD_SIZE_MIN -len;
+    }
+    flen = sizeof(*hdr)+len+pad;
+    debugf("dev=%s, type =0x%04f,len=%zu",dev->name,type,flen);
+    ether_print(frame,flen);
+    if(write(PRIV(dev)->fd,frame,flen)== -1){
+        errorf("write: %s",strerror(errno));
+        return -1;
+    }
+    return 0;
+
+
 }
 
 static int
@@ -59,7 +148,7 @@ ether_tap_input(struct net_device *dev, uint8_t *frame, size_t flen)
 }
 
 static void
-ether_tap_isr(unsigned int irq, void *arg)
+ether_tap_isr(unsigned int irq, void *arg) //interrupt service routine
 {
 }
 
