@@ -284,9 +284,7 @@ ip_output_device(struct ip_iface *iface, const uint8_t *data, size_t len, ip_add
         }
     }
     return net_device_output(NET_IFACE(iface)->dev,NET_PROTOCOL_TYPE_IP,data,len,hwaddr);
-
-
-
+    
 }
 
 static ssize_t
