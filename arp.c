@@ -263,6 +263,33 @@ arp_input(const uint8_t *data, size_t len, struct net_device *dev)
 int
 arp_resolve(struct net_iface *iface, ip_addr_t pa, uint8_t *ha)
 {
+    struct arp_cache *cache;
+    char addr1[IP_ADDR_STR_LEN];
+    char addr2[ETHER_ADDR_STR_LEN];
+
+    if(iface->dev->type != NET_DEVICE_TYPE_ETHERNET){
+        debugf("unsupported hardware address type");
+        return ARP_RESOLVE_ERROR;
+    }
+    if(iface->family != NET_IFACE_FAMILY_IP){
+        return ARP_RESOLVE_ERROR;
+    }
+
+    lock_acquire(&lock);
+    cache = arp_cache_select(pa);
+    if(!cache){
+        debugf("cache not found pa=%s",ip_addr_ntop(pa,addr1,sizeof(addr1)));
+        lock_release(&lock);
+        return ARP_RESOLVE_ERROR;
+    }
+    memcpy(ha,cache->ha,ETHER_ADDR_LEN);
+    lock_release(&lock);
+    debugf("resolved,pa=%s,ha=%s",ip_addr_ntop(pa,addr1,sizeof(addr1)),ether_addr_ntop(ha,addr2,sizeof(addr2)));
+    return ARP_RESOLVE_FOUND;
+
+
+
+
 }
 
 static void
