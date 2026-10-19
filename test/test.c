@@ -13,7 +13,7 @@
 #include "ip.h"
 #include "driver/ether_tap.h"
 #include "udp.h"
-
+#include "pthread.h"
 
 static volatile sig_atomic_t terminate;
 
@@ -23,7 +23,6 @@ on_signal(int signum)
     (void)signum;
     terminate = 1;
 }
-
 
 static int setup(void)
 {
@@ -44,34 +43,41 @@ static int setup(void)
         return -1;
     }
     dev = loopback_init();
-    if(!dev){
+    if (!dev)
+    {
         errorf("loopback_init() failure");
         return -1;
     }
-    iface = ip_iface_alloc(LOOPBACK_IP_ADDR,LOOPBACK_NETMASK);
-    if(!iface){
+    iface = ip_iface_alloc(LOOPBACK_IP_ADDR, LOOPBACK_NETMASK);
+    if (!iface)
+    {
         errorf("ip_iface_alloc() failure");
         return -1;
     }
-    if(ip_iface_register(dev,iface) == -1){
+    if (ip_iface_register(dev, iface) == -1)
+    {
         errorf("ip_iface_register() failure");
         return -1;
     }
-    dev = ether_tap_init(ETHER_TAP_NAME,ETHER_TAP_HW_ADDR);
-    if(!dev){
+    dev = ether_tap_init(ETHER_TAP_NAME, ETHER_TAP_HW_ADDR);
+    if (!dev)
+    {
         errorf("ether_tap_init() failure");
         return -1;
     }
-    iface = ip_iface_alloc(ETHER_TAP_IP_ADDR,ETHER_TAP_NETMASK);
-    if(!iface){
+    iface = ip_iface_alloc(ETHER_TAP_IP_ADDR, ETHER_TAP_NETMASK);
+    if (!iface)
+    {
         errorf("ip_iface_alloc() failure");
         return -1;
     }
-    if(ip_iface_register(dev,iface) == -1){
+    if (ip_iface_register(dev, iface) == -1)
+    {
         errorf("ip_iface_register() failure");
         return -1;
     }
-    if(ip_route_set_default_gateway(iface,DEFAULT_GATEWAY) == -1){
+    if (ip_route_set_default_gateway(iface, DEFAULT_GATEWAY) == -1)
+    {
         errorf("ip_route_set_default_gateway() failure");
         return -1;
     }
@@ -95,44 +101,80 @@ cleanup(void)
     return 0;
 }
 
-static int
-app_main(void)
+static void*
+receiver(void *arg)
 {
     int desc;
-    ip_endp_t local;
+    uint8_t buf[128];
+    ip_endp_t remote;
+    ssize_t n;
+    char endp[IP_ENDP_STR_LEN];
 
-    desc = udp_cmd_open();
-    if(desc == -1){
-        errorf("udp_open() failure");
-        return -1;
+    debuf("running...");
+    desc = *(int *)arg;
+    while(!terminate){
+        n = udp_cmd_recvfrom(desc,buf,sizeof(buf),&remote);
+        if(n==-1){
+            if(errno == EINTR){
+                continue;
+            }
+            warnf("udp_cmd_recvfrom() failure");
+            break;
+        }
+        infof("%d bytes data recieve from %s",
+        n,ip_endp_ntop(remote,endp,sizeof(endp)));
+        hexdump(stderr,buf,n);
     }
-    ip_endp_pton("192.0.2.2:7",&local);
-    if(udp_cmd_bind(desc,local) == -1){
-        errorf("udp_bind() failure");
-        udp_cmd_close(desc);
-        return -1;
-    }
-    
-    debugf("press Ctrl+C to terminate");
-    while (!terminate)
-    {
-       sleep(1);
-    }
-    udp_cmd_close(desc);
-    debugf("terminalte");
-    return 0;
+    debugf("terminate");
+    return NULL;
 }
 
 
+static int
+app_main(void)
+{
+    int desc, err;
+    ip_endp_t remote;
+    pthread_t tid;
+    uint8_t buf[128];
+    ssize_t n;
+    char endp[IP_ENDP_STR_LEN];
 
-
-
-
-
-
-
-
-
+    desc = udp_cmd_open();
+    if (desc == -1)
+    {
+        errorf("udp_open() failure");
+        return -1;
+    }
+    err = pthread_create(&tid, NULL, receiver, (void *)&desc);
+    if (err)
+    {
+        errorf("pthread_create() %s", strerror(err));
+        udp_cmd_close(desc);
+        return -1;
+    }
+    ip_endp_pton("192.0.2.1:10007", &remote);
+    debugf("press Ctrl+C to terminate");
+    while (!terminate)
+    {
+        if (!fgets((char *)buf, sizeof(buf), stdin))
+        {
+            break;
+        }
+        n = strlen((char *)buf);
+        infof("%d bytes data send to %s",
+              n, ip_endp_ntop(remote, endp, sizeof(endp)));
+        hexdump(stderr,buf,n);
+        if(udp_cmd_sendto(desc,buf,n,remote) == -1){
+            errorf("udp_cmd_sendto() failure");
+            break;
+        }
+    }
+    udp_cmd_close(desc);
+    pthread_join(tid,NULL);
+    debugf("terminalte");
+    return 0;
+}
 
 int main(void)
 {
