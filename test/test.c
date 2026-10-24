@@ -4,16 +4,15 @@
 #include <errno.h>
 #include <unistd.h>
 #include "icmp.h"
-
 #include "util.h"
 #include "net.h"
-
+#include "platform.h"
 #include "driver/loopback.h"
 #include "test.h"
 #include "ip.h"
 #include "driver/ether_tap.h"
 #include "udp.h"
-#include "pthread.h"
+#include <pthread.h>
 
 static volatile sig_atomic_t terminate;
 
@@ -22,6 +21,7 @@ on_signal(int signum)
 {
     (void)signum;
     terminate = 1;
+    intr_raise(INTR_IRQ_USER);
 }
 
 static int setup(void)
@@ -110,7 +110,7 @@ receiver(void *arg)
     ssize_t n;
     char endp[IP_ENDP_STR_LEN];
 
-    debuf("running...");
+    debugf("running...");
     desc = *(int *)arg;
     while(!terminate){
         n = udp_cmd_recvfrom(desc,buf,sizeof(buf),&remote);
